@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: mydatabase
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: admin
+      MYSQL_ROOT_PASSWORD: admin
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./key.json:/home/key.json
+
+
+
+  nginx:
+    build: ./nginx
+    volumes:
+      - ./coin/static:/usr/src/app/static
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+    environment:
+      APK_PACKAGES: "tzdata"
+
+  web:
+    build: .
+    command: bash -c "wait-for-it db:3306 -- python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - static_volume:/usr/src/app/static
+      - ./coin:/coin
+      - ./key.json:/home/key.json
+    ports:
+      - 8000:8000
+    depends_on:
+      - db
+    environment:
+      DJANGO_SETTINGS_MODULE: coin.settings
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+  redis:
+    image: redis
+    ports:
+      - 6379:6379
+
+  worker:
+    build : .
+    command: bash -c "celery -A coin.celery worker --loglevel=info"
+    volumes:
+      - ./coin:/coin
+    links:
+      - redis
+    depends_on:
+      - web
+    environment:
+      DJANGO_SETTINGS_MODULE: coin.settings
+      DATABASE_URL: mysql://admin:admin@db/mydatabase
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CELERY_BROKER_URL: redis://redis:6379/
+
+volumes:
+  static_volume:
+  mysql_data:

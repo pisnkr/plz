@@ -1,0 +1,4 @@
+FROM play_web:latest
+
+RUN pip install celery
+
